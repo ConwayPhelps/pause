@@ -1,4 +1,4 @@
-# pause
+# pause_5.0.1
 
 What this script does:
   1. Allows for the interruption of the current process until either the optional timer reaches [00] or the user presses any alphanumeric key. 
