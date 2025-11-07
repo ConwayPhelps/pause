@@ -1,0 +1,208 @@
+#! /usr/bin/bash
+###################################################################################################################################################
+# 
+# MIT License 
+#
+#   Copyright (c) 2024 CSPhelps <Grawmpy> 
+#
+#   GPL3.0 License
+#
+#   Permission is hereby granted, free of charge, to any person obtaining a copy 
+#   of this software and associated documentation files (the "Software"), to deal 
+#   in the Software without restriction, including without limitation the rights 
+#   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
+#   copies of the Software, and to permit persons to whom the Software is 
+#   furnished to do so, subject to the following conditions: 
+#
+#   The above copyright notice and this permission notice shall be included in all 
+#   copies or substantial portions of the Software. 
+#
+#   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+#   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+#   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+#   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+#   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+#   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+#   SOFTWARE. 
+#
+###################################################################################################################################################
+#
+#   This is a simple script allow for the interruption of the current process until either the
+#   timer reaches 00 or the user presses any key to continue. If no timer is used,
+#   the process will be paused indefinitely until the user manually presses any key except shift. 
+#   Using the timer (in seconds only) continues the current process without user interaction after 
+#   the elapsed time and the timer reaches 00. All values must be in number of seconds. 
+#   5 minutess (5 x 60) = 300 seconds, etc.
+#
+# Examples of use:
+#
+# input: (no options). Will maintain this prompt indefinitely until user interupts by pressing a key.
+# $ ./pause.sh
+# output:
+# $ Press any key to continue...
+# $
+#
+# input: (with timer). Will countdown for the time sent to the prompt, no limit
+# $ ./pause.sh -t 10 [or, --timer 10]
+# output:
+# $ Press any key to continue...
+# $
+#
+# input: (with timer, custom prompt and custom response text)
+# $ ./pause.sh --timer 10 --prompt '*Finished process 1*' --response '-- Continuing with process 2 --'
+#   or 
+# $ ./pause.sh -t 10 -p 'Finished process 1' -r '-- Continuing with process 2 --'
+# output:
+# $ Finished process 1
+# $ -- Continuing with process 2 --
+# $
+#
+###################################################################################################################################################
+
+# Variables
+declare DEFAULT_PROMPT
+declare -i TIMER
+declare QUIET_MODE
+
+DEFAULT_PROMPT="Press any key to continue..."
+SCRIPT="${0##*/}" 
+VERSION='5.0.1'
+AUTHOR='CSPhelps'
+COPYRIGHT="Software is intended as free use and is offered 
+'as is' with no implied guarantees or copyrights."
+DESCRIPTION="A simple script that interrupts the current process. 
+Optional custom prompt message and countdown timer. 
+Command will interrupt process indefinitely until 
+  any key is pressed or optional timer reaches 00. 
+All arguments are optional."
+
+# Translation of long options to short options (using built-in case and shift)
+for arg in "$@"; do
+  shift
+  case "$arg" in
+    '--timer'    ) set -- "$@" '-t'   ;;
+    '--prompt'   ) set -- "$@" '-p'   ;;
+    '--response' ) set -- "$@" '-r'   ;;
+    '--quiet'    ) set -- "$@" '-q'   ;;
+    '--help'     ) set -- "$@" '-h'   ;;
+    *            ) set -- "$@" "$arg" ;;
+  esac
+done
+
+# Using built-in getopts for option parsing
+while getopts ":t:p:r:q:h" OPTION; do
+  case "$OPTION" in
+    t)  TIMER="${OPTARG//^[0-9]/}"
+        ;;
+    p)  DEFAULT_PROMPT="${OPTARG}" ;
+        ;;
+    r)  RETURN_TEXT="${OPTARG}" ;      
+        ;;
+    q)  QUIET_MODE=1 ;
+        ;;
+    h)  echo "${SCRIPT} v.${VERSION} by ${AUTHOR}
+        ${COPYRIGHT}
+        ${DESCRIPTION}
+        Usage:
+        ${SCRIPT} [-p, --prompt] [-t , --timer] [-r, --response] [-q, --quiet] [-h, --help]
+
+        All arguments are optional.
+          -p, --prompt    [ custom prompt text (string must be in quotes) ]
+          -t, --timer     [ countdown in seconds ]
+          -r, --response  [ custom response when continuing (string must be in quotes) ]
+          -q, --quiet     [ suppress all output messages ]
+          -h, --help      [ this information ]
+        "  
+        exit 0 
+        ;;
+    ?)  # Error handling uses built-in printf redirected to stderr
+        printf '\r%s\n\n' "${SCRIPT} v.${VERSION} by ${AUTHOR}" >&2
+        printf '\r%s\n\n' "${COPYRIGHT}" >&2
+        printf '\r%s\n\n' "${DESCRIPTION}" >&2
+        printf '\r%s\n' "Usage:" >&2
+        printf '\r%s\n' " All arguments are optional.
+        -p, --prompt    [ custom prompt text (string must be in quotes) ]
+        -t, --timer     [ countdown in seconds ]
+        -r, --response  [ custom response when continuing (string must be in quotes) ]
+        -q, --quiet     [ suppress all output messages ]
+        -h, --help      [ this information ]
+        " >&2
+        exit 1
+        ;;
+  esac
+done
+
+shift "$(( OPTIND - 1 ))"
+
+# Global key variable (pure bash built-in declare)
+declare key
+
+# timer interrupt (pure bash built-in commands used)
+interrupt0(){
+    local loop_count="${TIMER}"
+    local text_prompt="${DEFAULT_PROMPT}"
+    local return_prompt="${RETURN_TEXT}"
+    
+    [[ -z "$QUIET_MODE" ]] && printf "\e[?25l" >&2 # Hide cursor
+
+    while (( loop_count > 0 )) ; do # Arithmetic built-in
+        [[ -z "$QUIET_MODE" ]] && printf "[%02d] ${text_prompt[*]} \r" "${loop_count}" >&2
+        
+        # 'read' is a shell built-in
+        if read -rn1 -t1 user_input_key &>/dev/null; then 
+            key="$user_input_key"
+            break
+        fi
+        (( loop_count = loop_count - 1 )) # Arithmetic expansion is pure bash
+    done 
+    
+    [[ -z "$QUIET_MODE" ]] && printf "\e[?25h" >&2 # Show cursor
+
+    if [[ -n ${return_prompt} && -z "$QUIET_MODE" ]] ; 
+    then 
+        printf "\r\n" >&2; printf '%s\r\n' "${return_prompt}" >&2; 
+    elif [[ -z "$QUIET_MODE" ]]; 
+    then 
+        printf "\r\n" >&2; 
+    fi
+    return 0
+} ;
+
+# pause interrupt (pure bash built-in commands used)
+interrupt1(){ 
+    local text_prompt="${DEFAULT_PROMPT}"
+    local return_prompt="${RETURN_TEXT}"
+
+    local prompt_string=""
+    [[ -z "$QUIET_MODE" ]] && prompt_string="${text_prompt[*]}"
+
+    # 'read' built-in with silent and prompt options
+    read -rsn 1 -p "${prompt_string}" user_input_key
+
+    key="$user_input_key"
+
+    if [[ -n ${return_prompt} && -z "$QUIET_MODE" ]] ; 
+        then printf "\r\n" >&2; printf '%s\r\n' "${return_prompt}" >&2; 
+    elif [[ -z "$QUIET_MODE" ]];
+    then
+        printf "\r\n" >&2;
+    fi
+    return 0 
+} ;
+
+
+# Main logic flow control using pure bash 'if' statements
+if [[ "${TIMER}" -ne 0 ]] ; 
+then 
+    interrupt0; 
+else 
+    interrupt1;
+fi
+
+# Final logic uses pure bash regex matching and substring expansion with explicit ranges
+# to avoid using the POSIX character class [[:alnum:]]
+if [[ "$key" =~ ^[a-zA-Z0-9]$ ]]; then
+    printf "%s\n\r" "${key:0:1}"
+fi
+
+exit $? ;
